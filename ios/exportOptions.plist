@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- development：免费 Apple ID（Personal Team）也能用，装到已连接登记过的设备，签名有效期 7 天。
+	     build-ipa.sh 会用环境变量 TEAM_ID 给 archive 指定 Team，这里不要再写死 teamID，
+	     否则占位字符串会让 xcodebuild -exportArchive 失败。 -->
+	<key>method</key>
+	<string>development</string>
+	<key>signingStyle</key>
+	<string>automatic</string>
+	<key>stripSwiftSymbols</key>
+	<true/>
+	<key>compileBitcode</key>
+	<false/>
+	<key>uploadSymbols</key>
+	<false/>
+
+	<!-- 需要 Ad Hoc 分发（付费开发者账号、最多 100 台设备）时：
+	     1) 把上面的 method 改成 ad-hoc；
+	     2) 取消下面注释并填真实值；
+	     3) 在 developer.apple.com 登记设备 UDID 并生成 Ad Hoc 描述文件。
+	<key>teamID</key>
+	<string>YOUR_TEAM_ID</string>
+	<key>provisioningProfiles</key>
+	<dict>
+		<key>com.fileshare.phone</key>
+		<string>YOUR_ADHOC_PROFILE_NAME</string>
+	</dict>
+	-->
+</dict>
+</plist>

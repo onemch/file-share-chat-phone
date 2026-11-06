@@ -1,0 +1,360 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 50;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		B20000000000000000000001 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000001 /* AppDelegate.swift */; };
+		B20000000000000000000002 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000002 /* ViewController.swift */; };
+		B20000000000000000000003 /* HTTPServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000005 /* HTTPServer.swift */; };
+		B20000000000000000000004 /* HTTPTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000006 /* HTTPTypes.swift */; };
+		B20000000000000000000005 /* Router.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000007 /* Router.swift */; };
+		B20000000000000000000006 /* MultipartParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000008 /* MultipartParser.swift */; };
+		B20000000000000000000007 /* FileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000009 /* FileStore.swift */; };
+		B20000000000000000000008 /* ChatHub.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000A /* ChatHub.swift */; };
+		B20000000000000000000009 /* WebSocket.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000B /* WebSocket.swift */; };
+		B2000000000000000000000A /* ZipWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000C /* ZipWriter.swift */; };
+		B2000000000000000000000B /* NetworkInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000D /* NetworkInfo.swift */; };
+		B2000000000000000000000C /* www in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000004 /* www */; };
+		B2000000000000000000000D /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000F /* Foundation.framework */; };
+		B2000000000000000000000E /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000000000000000000010 /* UIKit.framework */; };
+		B2000000000000000000000F /* WebKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000000000000000000011 /* WebKit.framework */; };
+		B20000000000000000000010 /* Network.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000000000000000000012 /* Network.framework */; };
+		B20000000000000000000011 /* CryptoKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000000000000000000013 /* CryptoKit.framework */; };
+		B20000000000000000000012 /* UniformTypeIdentifiers.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000000000000000000014 /* UniformTypeIdentifiers.framework */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		A10000000000000000000001 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		A10000000000000000000002 /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
+		A10000000000000000000003 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A10000000000000000000004 /* www */ = {isa = PBXFileReference; lastKnownFileType = folder; path = www; sourceTree = "<group>"; };
+		A10000000000000000000005 /* HTTPServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Server/HTTPServer.swift; sourceTree = "<group>"; };
+		A10000000000000000000006 /* HTTPTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Server/HTTPTypes.swift; sourceTree = "<group>"; };
+		A10000000000000000000007 /* Router.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Server/Router.swift; sourceTree = "<group>"; };
+		A10000000000000000000008 /* MultipartParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Server/MultipartParser.swift; sourceTree = "<group>"; };
+		A10000000000000000000009 /* FileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Server/FileStore.swift; sourceTree = "<group>"; };
+		A1000000000000000000000A /* ChatHub.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Server/ChatHub.swift; sourceTree = "<group>"; };
+		A1000000000000000000000B /* WebSocket.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Server/WebSocket.swift; sourceTree = "<group>"; };
+		A1000000000000000000000C /* ZipWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Server/ZipWriter.swift; sourceTree = "<group>"; };
+		A1000000000000000000000D /* NetworkInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Server/NetworkInfo.swift; sourceTree = "<group>"; };
+		A1000000000000000000000E /* FileSharePhone.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FileSharePhone.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1000000000000000000000F /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
+		A10000000000000000000010 /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
+		A10000000000000000000011 /* WebKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WebKit.framework; path = System/Library/Frameworks/WebKit.framework; sourceTree = SDKROOT; };
+		A10000000000000000000012 /* Network.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Network.framework; path = System/Library/Frameworks/Network.framework; sourceTree = SDKROOT; };
+		A10000000000000000000013 /* CryptoKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CryptoKit.framework; path = System/Library/Frameworks/CryptoKit.framework; sourceTree = SDKROOT; };
+		A10000000000000000000014 /* UniformTypeIdentifiers.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UniformTypeIdentifiers.framework; path = System/Library/Frameworks/UniformTypeIdentifiers.framework; sourceTree = SDKROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		C30000000000000000000009 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B2000000000000000000000D /* Foundation.framework in Frameworks */,
+				B2000000000000000000000E /* UIKit.framework in Frameworks */,
+				B2000000000000000000000F /* WebKit.framework in Frameworks */,
+				B20000000000000000000010 /* Network.framework in Frameworks */,
+				B20000000000000000000011 /* CryptoKit.framework in Frameworks */,
+				B20000000000000000000012 /* UniformTypeIdentifiers.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		C30000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				C30000000000000000000002 /* FileSharePhone */,
+				C30000000000000000000003 /* Products */,
+				C30000000000000000000004 /* Frameworks */,
+			);
+			sourceTree = "<group>";
+		};
+		C30000000000000000000002 /* FileSharePhone */ = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000001 /* AppDelegate.swift */,
+				A10000000000000000000002 /* ViewController.swift */,
+				A10000000000000000000003 /* Info.plist */,
+				A10000000000000000000004 /* www */,
+				A10000000000000000000005 /* HTTPServer.swift */,
+				A10000000000000000000006 /* HTTPTypes.swift */,
+				A10000000000000000000007 /* Router.swift */,
+				A10000000000000000000008 /* MultipartParser.swift */,
+				A10000000000000000000009 /* FileStore.swift */,
+				A1000000000000000000000A /* ChatHub.swift */,
+				A1000000000000000000000B /* WebSocket.swift */,
+				A1000000000000000000000C /* ZipWriter.swift */,
+				A1000000000000000000000D /* NetworkInfo.swift */,
+			);
+			path = FileSharePhone;
+			sourceTree = "<group>";
+		};
+		C30000000000000000000003 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A1000000000000000000000E /* FileSharePhone.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		C30000000000000000000004 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				A1000000000000000000000F /* Foundation.framework */,
+				A10000000000000000000010 /* UIKit.framework */,
+				A10000000000000000000011 /* WebKit.framework */,
+				A10000000000000000000012 /* Network.framework */,
+				A10000000000000000000013 /* CryptoKit.framework */,
+				A10000000000000000000014 /* UniformTypeIdentifiers.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		C30000000000000000000006 /* FileSharePhone */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C3000000000000000000000F /* Build configuration list for PBXNativeTarget "FileSharePhone" */;
+			buildPhases = (
+				C30000000000000000000007 /* Sources */,
+				C30000000000000000000009 /* Frameworks */,
+				C30000000000000000000008 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = FileSharePhone;
+			productName = FileSharePhone;
+			productReference = A1000000000000000000000E /* FileSharePhone.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		C30000000000000000000005 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastUpgradeCheck = 1400;
+				TargetAttributes = {
+					C30000000000000000000006 = {
+						CreatedOnToolsVersion = 14.0;
+					};
+				};
+			};
+			buildConfigurationList = C3000000000000000000000E /* Build configuration list for PBXProject "FileSharePhone" */;
+			compatibilityVersion = "Xcode 10.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+				"zh-Hans",
+			);
+			mainGroup = C30000000000000000000001;
+			productRefGroup = C30000000000000000000003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				C30000000000000000000006 /* FileSharePhone */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		C30000000000000000000008 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B2000000000000000000000C /* www in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		C30000000000000000000007 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B20000000000000000000001 /* AppDelegate.swift in Sources */,
+				B20000000000000000000002 /* ViewController.swift in Sources */,
+				B20000000000000000000003 /* HTTPServer.swift in Sources */,
+				B20000000000000000000004 /* HTTPTypes.swift in Sources */,
+				B20000000000000000000005 /* Router.swift in Sources */,
+				B20000000000000000000006 /* MultipartParser.swift in Sources */,
+				B20000000000000000000007 /* FileStore.swift in Sources */,
+				B20000000000000000000008 /* ChatHub.swift in Sources */,
+				B20000000000000000000009 /* WebSocket.swift in Sources */,
+				B2000000000000000000000A /* ZipWriter.swift in Sources */,
+				B2000000000000000000000B /* NetworkInfo.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		C3000000000000000000000A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_BITCODE = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		C3000000000000000000000B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_BITCODE = NO;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		C3000000000000000000000C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_BITCODE = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = FileSharePhone/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.fileshare.phone;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		C3000000000000000000000D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_BITCODE = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = FileSharePhone/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.fileshare.phone;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		C3000000000000000000000E /* Build configuration list for PBXProject "FileSharePhone" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C3000000000000000000000A /* Debug */,
+				C3000000000000000000000B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C3000000000000000000000F /* Build configuration list for PBXNativeTarget "FileSharePhone" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C3000000000000000000000C /* Debug */,
+				C3000000000000000000000D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = C30000000000000000000005 /* Project object */;
+}

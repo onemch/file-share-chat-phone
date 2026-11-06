@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+download/
+temp/
+android/out/
+访问二维码.png
+.DS_Store

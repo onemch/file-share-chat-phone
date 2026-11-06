@@ -1,0 +1,684 @@
+(function () {
+  'use strict';
+
+  const $ = (id) => document.getElementById(id);
+  const LS = { base: 'fsc.base', nick: 'fsc.nick', hosts: 'fsc.hosts' };
+  const IMAGE_EXT = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic', 'svg'];
+  const VIDEO_EXT = ['mp4', 'mov', 'm4v', 'webm'];
+  const AUDIO_EXT = ['mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg'];
+  const ICON_DOWNLOAD = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>';
+  const ICON_TRASH = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13M10 11v6m4-6v6"/></svg>';
+
+  const state = {
+    base: location.origin,
+    nick: '',
+    files: [],
+    selected: new Set(),
+    manage: false,
+    query: '',
+    tab: 'files',
+    myId: '',
+    online: 0,
+    unread: 0,
+    ws: null,
+    wsRetry: 0,
+    wsTimer: null,
+    confirmCb: null,
+    installPrompt: null,
+    lanUrl: null,
+  };
+
+  // ---------------------------------------------------------------- 基础工具
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    }[c]));
+  }
+
+  let toastTimer;
+  function toast(msg) {
+    const el = $('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 2400);
+  }
+
+  function normalizeBase(raw) {
+    let v = String(raw || '').trim().replace(/\/+$/, '');
+    if (!v) return null;
+    if (!/^https?:\/\//i.test(v)) v = 'http://' + v;
+    try {
+      const u = new URL(v);
+      if (!u.hostname) return null;
+      return u.origin;
+    } catch (e) { return null; }
+  }
+
+  function shortHost(base) {
+    try { return new URL(base).host; } catch (e) { return base; }
+  }
+
+  function api(path, opts) {
+    opts = opts || {};
+    opts.cache = 'no-store';
+    return fetch(state.base + path, opts).then((r) => {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
+  }
+
+  function fileUrl(name, preview) {
+    return state.base + (preview ? '/preview/' : '/download/') + encodeURIComponent(name);
+  }
+
+  function triggerDownload(url, name) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name || '';
+    a.rel = 'noopener';
+    if (new URL(url).origin !== location.origin) a.target = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
+  function extOf(name) {
+    const i = String(name).lastIndexOf('.');
+    return i < 0 ? '' : name.slice(i + 1).toLowerCase();
+  }
+
+  function iconFor(item) {
+    if (item.type === 'folder') return { emoji: '📁', cls: 'i-folder' };
+    const e = extOf(item.name);
+    if (IMAGE_EXT.includes(e)) return { emoji: '🖼️', cls: 'i-image' };
+    if (VIDEO_EXT.includes(e)) return { emoji: '🎬', cls: 'i-video' };
+    if (AUDIO_EXT.includes(e)) return { emoji: '🎵', cls: 'i-audio' };
+    if (['zip', 'rar', '7z', 'tar', 'gz'].includes(e)) return { emoji: '🗜️', cls: 'i-archive' };
+    if (['apk', 'exe', 'msi', 'dmg', 'ipa'].includes(e)) return { emoji: '📦', cls: 'i-archive' };
+    if (['pdf', 'doc', 'docx', 'txt', 'md', 'xls', 'xlsx', 'ppt', 'pptx'].includes(e)) return { emoji: '📄', cls: 'i-doc' };
+    return { emoji: '📃', cls: '' };
+  }
+
+  // ---------------------------------------------------------------- 主机配置
+  function readStore(key, fallback) {
+    try { return localStorage.getItem(key) || fallback; } catch (e) { return fallback; }
+  }
+  function writeStore(key, value) {
+    try { localStorage.setItem(key, value); } catch (e) { /* 隐私模式忽略 */ }
+  }
+  function savedHosts() {
+    try { return JSON.parse(readStore(LS.hosts, '[]')) || []; } catch (e) { return []; }
+  }
+  function rememberHost(base) {
+    const list = [base].concat(savedHosts().filter((h) => h !== base)).slice(0, 5);
+    writeStore(LS.hosts, JSON.stringify(list));
+  }
+
+  function setStatus(ok, text) {
+    $('status-dot').parentElement.classList.toggle('status-ok', !!ok);
+    $('status-dot').parentElement.classList.toggle('status-bad', ok === false);
+    $('status-text').textContent = text;
+    $('state-tag').textContent = ok ? '已连接' : '不可达';
+  }
+
+  function applyBase(base, quiet) {
+    state.base = base;
+    state.lanUrl = null;
+    writeStore(LS.base, base);
+    rememberHost(base);
+    state.selected.clear();
+    state.files = [];
+    $('host-caption').textContent = shortHost(base) + ' · 共享空间';
+    $('current-host').textContent = base;
+    $('host-input').value = base;
+    $('qr-img').src = base + '/qr.png?t=' + Date.now();
+    renderSavedHosts();
+    if (!quiet) toast('已切换到 ' + shortHost(base));
+    checkHealth();
+    loadFiles();
+    connectWS();
+  }
+
+  function connectHost(raw) {
+    const base = normalizeBase(raw);
+    if (!base) { toast('地址格式不对，例如 http://192.168.1.5:5000'); return; }
+    applyBase(base);
+  }
+
+  function checkHealth() {
+    return api('/health').then((d) => {
+      setStatus(true, '已连接');
+      $('stat-online').textContent = d.online != null ? d.online : '—';
+      $('stat-files').textContent = d.items != null ? d.items : '—';
+      $('stat-lan').textContent = d.lan_ip || '—';
+      // 分享给别人的链接必须用局域网 IP，不能用 127.0.0.1（App 内嵌服务尤其重要）
+      state.lanUrl = (d.lan_ip && d.port) ? ('http://' + d.lan_ip + ':' + d.port) : null;
+      state.online = d.online || 0;
+      $('online-count').textContent = state.online;
+      return true;
+    }).catch(() => {
+      setStatus(false, '主机不可达');
+      $('stat-online').textContent = '—';
+      $('stat-files').textContent = '—';
+      $('stat-lan').textContent = '—';
+      return false;
+    });
+  }
+
+  function renderSavedHosts() {
+    const box = $('saved-hosts');
+    box.textContent = '';
+    const list = savedHosts().filter((h) => h !== state.base);
+    if (!list.length) return;
+    const label = document.createElement('div');
+    label.className = 'tip';
+    label.textContent = '最近连接过的主机';
+    box.appendChild(label);
+    list.forEach((h) => {
+      const row = document.createElement('div');
+      row.className = 'saved-host';
+      const span = document.createElement('span');
+      span.textContent = shortHost(h);
+      const use = document.createElement('button');
+      use.type = 'button';
+      use.textContent = '连接';
+      use.addEventListener('click', () => applyBase(h));
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.textContent = '×';
+      del.setAttribute('aria-label', '移除');
+      del.addEventListener('click', () => {
+        writeStore(LS.hosts, JSON.stringify(savedHosts().filter((x) => x !== h)));
+        renderSavedHosts();
+      });
+      row.append(span, use, del);
+      box.appendChild(row);
+    });
+  }
+
+  // ---------------------------------------------------------------- 文件列表
+  function loadFiles(showToast) {
+    return api('/files').then((list) => {
+      state.files = Array.isArray(list) ? list : [];
+      state.files.forEach((f, i) => { f._i = i; });
+      state.selected.clear();
+      renderFiles();
+      if (showToast) toast('已刷新，共 ' + state.files.length + ' 项');
+      checkHealth();
+    }).catch(() => {
+      if (!state.files.length) {
+        $('file-list').innerHTML = '';
+        $('empty-state').hidden = false;
+        $('empty-state').querySelector('p').textContent = '连不上主机';
+        $('empty-state').querySelector('span').textContent = '去「连接」页检查主机地址，确认服务端已启动';
+      }
+    });
+  }
+
+  function renderFiles() {
+    const q = state.query.trim().toLowerCase();
+    const list = q ? state.files.filter((f) => f.name.toLowerCase().includes(q)) : state.files;
+    const ul = $('file-list');
+    ul.classList.toggle('manage-mode', state.manage);
+    $('bulk-bar').hidden = !state.manage;
+    $('file-count').textContent = state.files.length;
+    $('empty-state').hidden = list.length > 0;
+    $('empty-state').querySelector('p').textContent = q ? '没有匹配的文件' : '共享空间还是空的';
+    $('empty-state').querySelector('span').textContent = q ? '换个关键词试试' : '点上面的「选择文件」上传第一个文件吧';
+    $('list-footer').hidden = list.length === 0;
+
+    const total = state.files.reduce((s, f) => s + (f.bytes || 0), 0);
+    $('list-footer').textContent = '共 ' + state.files.length + ' 项 · ' + humanSize(total) + ' · 下拉可刷新';
+
+    ul.innerHTML = list.map((f) => {
+      const ic = iconFor(f);
+      const checked = state.selected.has(f.name) ? 'checked' : '';
+      const sub = f.type === 'folder'
+        ? (f.file_count || 0) + ' 个文件 · ' + f.size
+        : f.size;
+      return '<li class="file-item' + (state.selected.has(f.name) ? ' selected' : '') + '" data-i="' + f._i + '">' +
+        '<input class="item-check" type="checkbox" ' + checked + ' data-act="check" aria-label="选择">' +
+        '<div class="file-icon ' + ic.cls + '">' + ic.emoji + '</div>' +
+        '<div class="file-main">' +
+          '<div class="file-name" title="' + esc(f.name) + '">' + esc(f.name) + '</div>' +
+          '<div class="file-meta"><span>' + esc(sub) + '</span><span>' + esc(f.modified_str || '') + '</span></div>' +
+        '</div>' +
+        '<div class="item-actions">' +
+          '<button class="act dl" data-act="download" type="button" aria-label="下载">' + ICON_DOWNLOAD + '</button>' +
+          '<button class="act del" data-act="delete" type="button" aria-label="删除">' + ICON_TRASH + '</button>' +
+        '</div></li>';
+    }).join('');
+    updateBulkCount();
+  }
+
+  function humanSize(n) {
+    if (n < 1024) return n + ' B';
+    if (n < 1048576) return (n / 1024).toFixed(2) + ' KB';
+    if (n < 1073741824) return (n / 1048576).toFixed(2) + ' MB';
+    return (n / 1073741824).toFixed(2) + ' GB';
+  }
+
+  function updateBulkCount() {
+    $('bulk-count').textContent = '已选 ' + state.selected.size + ' 项';
+    const all = state.files.length > 0 && state.selected.size === state.files.length;
+    $('check-all').checked = all;
+  }
+
+  function toggleSelect(name) {
+    if (state.selected.has(name)) state.selected.delete(name);
+    else state.selected.add(name);
+    renderFiles();
+  }
+
+  function openItem(item) {
+    if (item.type === 'folder') {
+      triggerDownload(fileUrl(item.name), item.name + '.zip');
+      toast('文件夹正在打包下载');
+      return;
+    }
+    const e = extOf(item.name);
+    if (IMAGE_EXT.includes(e) || VIDEO_EXT.includes(e) || AUDIO_EXT.includes(e) || e === 'pdf' || e === 'txt') {
+      showPreview(item, e);
+    } else {
+      triggerDownload(fileUrl(item.name), item.name);
+      toast('开始下载 ' + item.name);
+    }
+  }
+
+  function showPreview(item, e) {
+    const url = fileUrl(item.name, true);
+    let html;
+    if (IMAGE_EXT.includes(e)) html = '<img src="' + esc(url) + '" alt="预览">';
+    else if (VIDEO_EXT.includes(e)) html = '<video src="' + esc(url) + '" controls playsinline style="max-width:100%;max-height:62vh"></video>';
+    else if (AUDIO_EXT.includes(e)) html = '<audio src="' + esc(url) + '" controls style="width:100%;margin:40px 0"></audio>';
+    else html = '<iframe src="' + esc(url) + '" style="width:100%;height:62vh;border:0;border-radius:8px"></iframe>';
+    $('preview-body').innerHTML = html;
+    $('preview-name').textContent = item.name;
+    $('preview-modal').hidden = false;
+  }
+
+  function confirmBox(title, text, cb) {
+    $('confirm-title').textContent = title;
+    $('confirm-text').textContent = text;
+    state.confirmCb = cb;
+    $('confirm-modal').hidden = false;
+  }
+
+  function deleteNames(names) {
+    return api('/delete-selected', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ names: names }),
+    }).then((d) => {
+      toast(d.message || '已删除');
+      loadFiles();
+    }).catch(() => toast('删除失败，请检查主机连接'));
+  }
+
+  // ---------------------------------------------------------------- 上传
+  function uploadFiles(files, isFolder) {
+    files = Array.from(files || []).filter(Boolean);
+    if (!files.length) return;
+    const fd = new FormData();
+    let endpoint = '/upload';
+    let label;
+
+    if (isFolder) {
+      endpoint = '/upload-folder';
+      const first = files[0].webkitRelativePath || files[0].name;
+      const root = first.split('/')[0] || '上传文件夹';
+      fd.append('folder_name', root);
+      files.forEach((f) => {
+        const parts = (f.webkitRelativePath || f.name).split('/');
+        const rel = parts.slice(1).join('/') || f.name;
+        fd.append('files[]', f, rel);
+      });
+      label = '文件夹「' + root + '」（' + files.length + ' 个文件）';
+    } else {
+      files.forEach((f) => fd.append('file', f, f.name));
+      label = files.length === 1 ? files[0].name : files.length + ' 个文件';
+    }
+
+    const wrap = $('progress-wrap');
+    wrap.hidden = false;
+    $('progress-bar').style.width = '0%';
+    $('progress-text').textContent = '0%';
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', state.base + endpoint);
+    xhr.upload.onprogress = (e) => {
+      if (!e.lengthComputable) return;
+      const pct = Math.round(e.loaded / e.total * 100);
+      $('progress-bar').style.width = pct + '%';
+      $('progress-text').textContent = pct + '%';
+    };
+    xhr.onload = () => {
+      wrap.hidden = true;
+      let res = {};
+      try { res = JSON.parse(xhr.responseText); } catch (e) { /* ignore */ }
+      if (xhr.status >= 200 && xhr.status < 300 && res.success) {
+        toast('上传成功：' + label);
+        loadFiles();
+        notifyShared('分享了 ' + label);
+      } else {
+        toast('上传失败：' + (res.message || xhr.status));
+      }
+    };
+    xhr.onerror = () => { wrap.hidden = true; toast('上传失败，主机不可达'); };
+    xhr.send(fd);
+  }
+
+  function notifyShared(text) {
+    appendBubble({ type: 'file_shared', user_id: state.myId, nick: state.nick, message: text, mine: true });
+    sendWS({ type: 'file_shared', message: text });
+  }
+
+  // ---------------------------------------------------------------- 群聊
+  function wsUrl() {
+    const u = new URL(state.base);
+    u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:';
+    u.pathname = '/chat';
+    u.search = '?nick=' + encodeURIComponent(state.nick);
+    return u.toString();
+  }
+
+  function connectWS() {
+    clearTimeout(state.wsTimer);
+    if (state.ws) {
+      try { state.ws.onclose = null; state.ws.close(); } catch (e) { /* ignore */ }
+      state.ws = null;
+    }
+    let ws;
+    try { ws = new WebSocket(wsUrl()); } catch (e) { scheduleReconnect(); return; }
+    state.ws = ws;
+
+    ws.onopen = () => {
+      state.wsRetry = 0;
+      setStatus(true, '已连接');
+    };
+    ws.onmessage = (e) => {
+      let msg;
+      try { msg = JSON.parse(e.data); } catch (err) { return; }
+      handleMessage(msg);
+    };
+    ws.onclose = () => {
+      setStatus(false, '已断开');
+      scheduleReconnect();
+    };
+    ws.onerror = () => { /* onclose 统一处理 */ };
+  }
+
+  function scheduleReconnect() {
+    clearTimeout(state.wsTimer);
+    state.wsRetry = Math.min(state.wsRetry + 1, 6);
+    const delay = Math.min(1000 * Math.pow(1.6, state.wsRetry), 15000);
+    state.wsTimer = setTimeout(connectWS, delay);
+  }
+
+  function sendWS(obj) {
+    if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+      state.ws.send(JSON.stringify(obj));
+      return true;
+    }
+    return false;
+  }
+
+  function handleMessage(msg) {
+    if (msg.type === 'welcome') {
+      state.myId = msg.user_id;
+      state.online = msg.online_count || 0;
+      $('online-count').textContent = state.online;
+      $('chat-hint').textContent = (msg.users || []).length
+        ? '在线：' + msg.users.slice(0, 3).join('、') + ((msg.users.length > 3) ? ' 等' : '')
+        : '消息实时送达同一共享空间';
+      $('chat-messages').textContent = '';
+      appendSystem('已连接到共享空间');
+      return;
+    }
+    if (msg.type === 'system') {
+      state.online = msg.online_count != null ? msg.online_count : state.online;
+      $('online-count').textContent = state.online;
+      appendSystem(msg.message);
+      return;
+    }
+    if (msg.type === 'files_changed') { loadFiles(); return; }
+    if (msg.type === 'chat' || msg.type === 'file_shared') {
+      appendBubble(msg);
+      if (state.tab !== 'chat') {
+        state.unread++;
+        $('unread-badge').hidden = false;
+      }
+    }
+  }
+
+  function timeStr(iso) {
+    if (!iso) return '';
+    try { return new Date(iso).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }); }
+    catch (e) { return ''; }
+  }
+
+  function scrollChat() {
+    const box = $('chat-scroll');
+    requestAnimationFrame(() => { box.scrollTop = box.scrollHeight; });
+  }
+
+  function appendSystem(text) {
+    const el = document.createElement('div');
+    el.className = 'msg-system';
+    el.textContent = text;
+    $('chat-messages').appendChild(el);
+    scrollChat();
+  }
+
+  function appendBubble(msg) {
+    const mine = msg.mine || (state.myId && msg.user_id === state.myId);
+    const row = document.createElement('div');
+    row.className = 'msg-row' + (mine ? ' mine' : '');
+    const nick = document.createElement('div');
+    nick.className = 'msg-nick';
+    nick.textContent = mine ? '我' : (msg.nick || msg.user_id || '匿名设备');
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble' + (msg.type === 'file_shared' ? ' shared' : '');
+    bubble.textContent = msg.message || '';
+    const time = document.createElement('div');
+    time.className = 'msg-time';
+    time.textContent = timeStr(msg.timestamp) || '刚刚';
+    row.append(nick, bubble, time);
+    $('chat-messages').appendChild(row);
+    while ($('chat-messages').children.length > 200) $('chat-messages').firstChild.remove();
+    scrollChat();
+  }
+
+  function sendChat() {
+    const input = $('chat-input');
+    const text = input.value.trim();
+    if (!text) return;
+    if (!sendWS({ type: 'chat', message: text })) { toast('群聊未连接，正在重连…'); return; }
+    appendBubble({ type: 'chat', user_id: state.myId, nick: state.nick, message: text, mine: true, timestamp: new Date().toISOString() });
+    input.value = '';
+  }
+
+  // ---------------------------------------------------------------- Tab / 事件
+  function switchTab(name) {
+    state.tab = name;
+    document.querySelectorAll('.panel').forEach((p) => p.classList.toggle('active', p.id === 'panel-' + name));
+    document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
+    if (name === 'chat') { state.unread = 0; $('unread-badge').hidden = true; scrollChat(); }
+    if (name === 'connect') checkHealth();
+    window.scrollTo(0, 0);
+  }
+
+  function bind() {
+    document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => switchTab(t.dataset.tab)));
+
+    $('btn-pick-files').addEventListener('click', () => $('input-files').click());
+    $('btn-pick-folder').addEventListener('click', () => $('input-folder').click());
+    $('btn-pick-camera').addEventListener('click', () => $('input-camera').click());
+    $('input-files').addEventListener('change', (e) => { uploadFiles(e.target.files, false); e.target.value = ''; });
+    $('input-folder').addEventListener('change', (e) => { uploadFiles(e.target.files, true); e.target.value = ''; });
+    $('input-camera').addEventListener('change', (e) => { uploadFiles(e.target.files, false); e.target.value = ''; });
+
+    $('btn-refresh').addEventListener('click', () => loadFiles(true));
+    $('btn-manage').addEventListener('click', () => {
+      state.manage = !state.manage;
+      state.selected.clear();
+      $('btn-manage').textContent = state.manage ? '完成' : '管理';
+      renderFiles();
+    });
+    $('search-input').addEventListener('input', (e) => { state.query = e.target.value; renderFiles(); });
+
+    $('file-list').addEventListener('click', (e) => {
+      const li = e.target.closest('.file-item');
+      if (!li) return;
+      const item = state.files[Number(li.dataset.i)];
+      if (!item) return;
+      const act = e.target.closest('[data-act]');
+      const action = act ? act.dataset.act : null;
+      if (action === 'check' || (state.manage && !action)) { toggleSelect(item.name); return; }
+      if (action === 'download') {
+        triggerDownload(fileUrl(item.name), item.name);
+        toast(item.type === 'folder' ? '文件夹正在打包下载' : '开始下载');
+        return;
+      }
+      if (action === 'delete') {
+        confirmBox('删除文件', '确定删除「' + item.name + '」吗？此操作不可恢复。', () => deleteNames([item.name]));
+        return;
+      }
+      if (!action) openItem(item);
+    });
+
+    $('check-all').addEventListener('change', (e) => {
+      state.selected.clear();
+      if (e.target.checked) state.files.forEach((f) => state.selected.add(f.name));
+      renderFiles();
+    });
+    $('btn-bulk-download').addEventListener('click', () => {
+      if (!state.selected.size) { toast('请先选择项目'); return; }
+      const p = new URLSearchParams();
+      state.selected.forEach((n) => p.append('name', n));
+      triggerDownload(state.base + '/download-selected?' + p.toString(), '共享文件.zip');
+      toast('正在打包 ' + state.selected.size + ' 项');
+    });
+    $('btn-bulk-delete').addEventListener('click', () => {
+      if (!state.selected.size) { toast('请先选择项目'); return; }
+      const names = Array.from(state.selected);
+      confirmBox('批量删除', '确定删除选中的 ' + names.length + ' 个项目吗？此操作不可恢复。', () => deleteNames(names));
+    });
+
+    $('btn-send').addEventListener('click', sendChat);
+    $('chat-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); sendChat(); } });
+
+    $('btn-connect').addEventListener('click', () => connectHost($('host-input').value));
+    $('host-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') connectHost(e.target.value); });
+    $('btn-use-self').addEventListener('click', () => applyBase(location.origin));
+    $('btn-save-nick').addEventListener('click', () => {
+      const nick = $('nick-input').value.trim().slice(0, 20);
+      if (!nick) { toast('昵称不能为空'); return; }
+      state.nick = nick;
+      writeStore(LS.nick, nick);
+      connectWS();
+      toast('昵称已保存');
+    });
+    $('btn-copy-link').addEventListener('click', () => {
+      const target = state.lanUrl || state.base;
+      const link = target + '/?host=' + encodeURIComponent(target);
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(link).then(() => toast('链接已复制，发给朋友即可加入'), () => fallbackCopy(link));
+      } else fallbackCopy(link);
+    });
+    $('qr-img').addEventListener('error', () => {
+      const frame = $('qr-img').closest('.qr-frame');
+      if (frame) frame.hidden = true;
+      const card = $('qr-img').closest('.qr-card');
+      if (card && !card.querySelector('.qr-fallback')) {
+        const tip = document.createElement('p');
+        tip.className = 'tip qr-fallback';
+        tip.textContent = '当前主机未启用二维码，点下方按钮复制访问链接发给朋友，对方打开即可自动加入。';
+        card.insertBefore(tip, $('btn-copy-link'));
+      }
+    });
+
+    $('confirm-cancel').addEventListener('click', () => { $('confirm-modal').hidden = true; state.confirmCb = null; });
+    $('confirm-ok').addEventListener('click', () => {
+      $('confirm-modal').hidden = true;
+      const cb = state.confirmCb;
+      state.confirmCb = null;
+      if (cb) cb();
+    });
+    $('confirm-modal').querySelector('.modal-mask').addEventListener('click', () => { $('confirm-modal').hidden = true; });
+    $('preview-close').addEventListener('click', () => { $('preview-modal').hidden = true; $('preview-body').textContent = ''; });
+    $('preview-modal').querySelector('.modal-mask').addEventListener('click', () => { $('preview-modal').hidden = true; $('preview-body').textContent = ''; });
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      state.installPrompt = e;
+      $('btn-install').hidden = false;
+    });
+    $('btn-install').addEventListener('click', () => {
+      if (!state.installPrompt) return;
+      state.installPrompt.prompt();
+      state.installPrompt.userChoice.then(() => { state.installPrompt = null; $('btn-install').hidden = true; });
+    });
+
+    // 下拉刷新（文件页，页面在顶部时）
+    let startY = 0;
+    document.addEventListener('touchstart', (e) => {
+      startY = (window.scrollY <= 0 && state.tab === 'files') ? e.touches[0].clientY : 0;
+    }, { passive: true });
+    document.addEventListener('touchend', (e) => {
+      if (startY && e.changedTouches[0].clientY - startY > 80) loadFiles(true);
+      startY = 0;
+    }, { passive: true });
+
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(() => { /* 忽略：不影响使用 */ });
+      });
+    }
+  }
+
+  function fallbackCopy(text) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); toast('链接已复制'); } catch (e) { toast('复制失败，请手动复制：' + text); }
+    ta.remove();
+  }
+
+  // ---------------------------------------------------------------- 启动
+  function init() {
+    // 扫码进入：URL 里的 host 参数自动设为目标主机
+    const params = new URLSearchParams(location.search);
+    const fromQR = params.get('host');
+    if (fromQR) {
+      const b = normalizeBase(fromQR);
+      if (b) { writeStore(LS.base, b); rememberHost(b); }
+      try { history.replaceState(null, '', location.pathname); } catch (e) { /* ignore */ }
+    }
+
+    state.base = normalizeBase(readStore(LS.base, '')) || location.origin;
+    state.nick = readStore(LS.nick, '');
+    if (!state.nick) {
+      const ua = navigator.userAgent;
+      const device = /iPhone|iPad/.test(ua) ? 'iPhone' : (/Android/.test(ua) ? '安卓' : '设备');
+      state.nick = device + '-' + Math.random().toString(36).slice(2, 6);
+      writeStore(LS.nick, state.nick);
+    }
+    $('nick-input').value = state.nick;
+
+    bind();
+    applyBase(state.base, true);
+    appendSystem('欢迎来到共享空间，发送消息试试吧');
+    // 深链：?tab=files|chat|connect，可用于 PWA 快捷方式
+    const initialTab = params.get('tab');
+    if (initialTab && ['files', 'chat', 'connect'].indexOf(initialTab) >= 0) switchTab(initialTab);
+    setInterval(() => { if (document.visibilityState === 'visible') checkHealth(); }, 30000);
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
