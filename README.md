@@ -32,6 +32,8 @@
 
 ## 二、快速开始
 
+> 📘 三个平台的**图文操作手册（带软件截图）**在 `docs/` 目录：`文件共享中心-PC版操作手册.pdf`、`文件共享中心-安卓版操作手册.pdf`、`文件共享中心-iOS版操作手册.pdf`。需要重新生成时运行 `.venv/Scripts/python.exe tools/make_manuals.py`。
+
 ### 场景 A：PC 端当主机（最省事）
 
 1. 双击 `start.bat`（首次会自动建 `.venv` 并装依赖）。
@@ -128,6 +130,8 @@ file-share-chat-phone/
 ├── start.bat                 # Windows 一键启动
 ├── start.sh                  # Linux / macOS 启动
 ├── termux-start.sh           # 安卓 Termux 当主机
+├── docs/                     # 三份平台操作手册 PDF（带真实截图）
+├── tools/make_manuals.py     # 手册生成脚本（reportlab + 系统黑体）
 ├── pc-rust/                  # PC 端 Rust 版（单文件 exe，前端内嵌）
 ├── static/
 │   ├── index.html            # 移动 H5 单页（三个 Tab）
