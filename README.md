@@ -113,6 +113,8 @@ http://192.168.1.8:5000/?host=http%3A%2F%2F192.168.1.8%3A5000
 > 顶部连接灯可点击，直接跳到「连接」页。深链 `?tab=files` / `?tab=chat` / `?tab=connect` 可打开指定页面。
 >
 > **状态栏适配**：网页端用 `--safe-top`（`env(safe-area-inset-top)` + 原生可注入的 `--extra-top`）统一撑开顶部；安卓 App 去掉了重复的原生栏，并让 WebView 避开系统状态栏与导航栏，不会再和信号栏重合。
+>
+> **多端适配**：同一套页面按宽度分五档布局——手机（<600）、大屏手机/小平板（≥600）、iPad 竖屏（≥768，文件两列 + 上传区横向）、iPad 横屏/小 PC（≥1024，连接页两列）、标准 PC（≥1280，多列卡片）与超宽屏（≥1600，限宽居中）。手机横屏矮屏自动压缩工具栏；hover 动效只在有鼠标的设备启用，触屏点击不留残影。
 
 ---
 
@@ -232,11 +234,14 @@ Apple 的编译、签名、IPA 导出只能在 **macOS + Xcode** 上完成，且
 
 `pc-rust/` 是同一套服务的 **Rust 实现**：编译后是**单个 exe**，移动端前端（含离线二维码库）已编译进二进制，运行时不需要 Python 或任何运行库。
 
+**双击 `file-share-pc.exe` 打开的是图形启动器窗口，不是黑色命令行窗**。窗口里显示服务状态、本机/局域网地址、共享项目数与在线设备数，还可一键复制邀请链接、打开网页、打开共享文件夹；关闭窗口即停止服务。
+
 ```bash
 cd pc-rust
 build.bat                                   # Windows 双击；或 bash build.sh
-file-share-pc.exe                           # 默认 5000 端口，共享目录 ./download
+file-share-pc.exe                           # 图形启动器（默认 5000 端口，共享目录 ./download）
 file-share-pc.exe --port 5001 --dir D:\共享文件夹
+file-share-pc.exe --no-gui                  # 纯后台模式，不显示窗口（适合计划任务）
 ```
 
 API 与 Python 版完全一致，**三端可以混着用**（Rust 版当主机、Python 版当主机、手机 App 当主机都行）。详见 `pc-rust/README.md`。

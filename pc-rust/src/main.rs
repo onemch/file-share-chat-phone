@@ -1,6 +1,12 @@
 //! 文件共享中心 · PC 端（Rust）
 //! 单文件 exe：移动端前端用 rust-embed 编进二进制，运行时只需 download/ 目录。
 //! API 与 Python 版 server.py / Android / iOS 内嵌服务完全一致。
+//! 发布构建隐藏控制台，改由 egui 图形启动器显示状态。
+
+// 双击运行不弹黑色控制台窗口（--no-gui 仍可作为后台服务）
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+mod launcher;
 
 use axum::body::Body;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
@@ -63,6 +69,11 @@ impl WsHub {
 
     async fn online(&self) -> usize {
         self.clients.lock().await.len()
+    }
+
+    /// 供图形界面同步轮询，锁被占用时返回 0，不阻塞窗口绘制。
+    pub fn try_online(&self) -> usize {
+        self.clients.try_lock().map(|c| c.len()).unwrap_or(0)
     }
 
     async fn users(&self) -> Vec<String> {
@@ -768,9 +779,10 @@ async fn chat_socket(mut socket: WebSocket, st: AppState, nick: String) {
 
 // ---------------------------------------------------------------- 启动
 
-fn parse_args() -> (u16, PathBuf) {
+fn parse_args() -> (u16, PathBuf, bool) {
     let mut port = 5000u16;
     let mut dir = PathBuf::from("download");
+    let mut no_gui = false;
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut i = 0;
     while i < args.len() {
@@ -787,35 +799,27 @@ fn parse_args() -> (u16, PathBuf) {
                     i += 1;
                 }
             }
+            "--no-gui" => no_gui = true,
             "--help" | "-h" => {
-                println!("文件共享中心 · PC 端（Rust）\n用法：file-share-pc [--port 5000] [--dir D:\\共享文件夹]");
+                println!("文件共享中心 · PC 端（Rust）");
+                println!("用法：file-share-pc [--port 5000] [--dir D:\\共享文件夹] [--no-gui]");
+                println!("  --no-gui  只运行服务，不开图形窗口（适合后台/计划任务）");
                 std::process::exit(0);
             }
             _ => {}
         }
         i += 1;
     }
-    (port, dir)
+    (port, dir, no_gui)
 }
 
-#[tokio::main]
-async fn main() {
-    let (port, share_dir) = parse_args();
-    let share_dir = std::fs::canonicalize(&share_dir).unwrap_or_else(|_| {
-        std::fs::create_dir_all(&share_dir).expect("无法创建共享目录");
-        std::fs::canonicalize(&share_dir).expect("无法定位共享目录")
-    });
-    let app_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let temp_dir = app_dir.join("temp");
-    let _ = std::fs::create_dir_all(&temp_dir);
-    let _ = std::fs::create_dir_all(&share_dir);
-
-    let state = AppState {
-        share_dir,
-        temp_dir,
-        port,
-        hub: Arc::new(WsHub::new()),
-    };
+async fn run_server(
+    port: u16,
+    share_dir: PathBuf,
+    temp_dir: PathBuf,
+    hub: Arc<WsHub>,
+) -> Result<(), String> {
+    let state = AppState { share_dir, temp_dir, port, hub };
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     let cors = CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any);
 
@@ -836,16 +840,44 @@ async fn main() {
         .with_state(state)
         .layer(cors);
 
-    println!("========================================================");
-    println!("  文件共享中心 · PC 端（Rust）  [已启动]");
-    println!("========================================================");
-    println!("  本机访问     http://127.0.0.1:{}", port);
-    println!("  局域网访问   http://{}:{}", lan_ip(), port);
-    println!("  其他手机连同一 WiFi 打开上面的地址即可共享文件与群聊");
-    println!("========================================================");
-
     let listener = tokio::net::TcpListener::bind(addr)
         .await
-        .expect("端口绑定失败，可能被占用，试试 --port 5001");
-    axum::serve(listener, app).await.expect("服务运行失败");
+        .map_err(|e| format!("端口 {} 绑定失败：{}（试试 --port 5001）", port, e))?;
+    axum::serve(listener, app).await.map_err(|e| e.to_string())
+}
+
+fn main() {
+    let (port, raw_dir, no_gui) = parse_args();
+    let share_dir = std::fs::canonicalize(&raw_dir).unwrap_or_else(|_| {
+        std::fs::create_dir_all(&raw_dir).expect("无法创建共享目录");
+        std::fs::canonicalize(&raw_dir).expect("无法定位共享目录")
+    });
+    let app_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let temp_dir = app_dir.join("temp");
+    let _ = std::fs::create_dir_all(&temp_dir);
+    let _ = std::fs::create_dir_all(&share_dir);
+
+    let hub = Arc::new(WsHub::new());
+    let server_hub = hub.clone();
+    let server_dir = share_dir.clone();
+    let server_temp = temp_dir.clone();
+    let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
+
+    std::thread::spawn(move || {
+        let rt = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
+            Ok(rt) => rt,
+            Err(e) => { let _ = tx.send(Err(e.to_string())); return; }
+        };
+        let result = rt.block_on(run_server(port, server_dir, server_temp, server_hub));
+        let _ = tx.send(result);
+    });
+
+    if no_gui {
+        // 纯后台模式：主线程挂住即可，窗口不显示
+        loop {
+            std::thread::sleep(std::time::Duration::from_secs(3600));
+        }
+    } else {
+        launcher::run(port, lan_ip(), share_dir, hub, rx);
+    }
 }
