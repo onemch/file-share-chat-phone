@@ -1,0 +1,16 @@
+{
+  "name": "文件共享中心 · 手机版",
+  "short_name": "共享中心",
+  "description": "局域网文件共享与实时群聊，手机即开即用",
+  "lang": "zh-CN",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F5F6FA",
+  "theme_color": "#6C5CE7",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

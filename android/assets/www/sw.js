@@ -1,5 +1,5 @@
 /* 只离线缓存界面壳；API、跨主机请求、WebSocket 一律直连，不缓存 */
-const CACHE = 'fsc-phone-v2';
+const CACHE = 'fsc-phone-v3';
 const SHELL = [
   '/', '/static/style.css', '/static/app.js',
   '/static/qrcode.min.js', '/static/jsqr.min.js',
@@ -37,24 +37,16 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
   if (API_PREFIX.some((p) => url.pathname.startsWith(p))) return;
 
-  if (url.pathname === '/') {
+  // 界面壳与脚本一律 network-first：保证改版后刷新就能拿到新代码，
+  // 离线时才回退缓存。API 与跨主机请求始终直连，不缓存。
+  if (url.pathname === '/' || SHELL.includes(url.pathname)) {
+    const key = url.pathname === '/' ? '/' : req;
     event.respondWith(
       fetch(req).then((res) => {
         const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put('/', copy)).catch(() => {});
+        caches.open(CACHE).then((c) => c.put(key, copy)).catch(() => {});
         return res;
-      }).catch(() => caches.match('/'))
-    );
-    return;
-  }
-
-  if (SHELL.includes(url.pathname)) {
-    event.respondWith(
-      caches.match(req).then((hit) => hit || fetch(req).then((res) => {
-        const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
-        return res;
-      }))
+      }).catch(() => caches.match(key))
     );
   }
 });

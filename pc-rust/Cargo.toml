@@ -1,0 +1,22 @@
+[package]
+name = "file-share-pc"
+version = "1.0.0"
+edition = "2021"
+description = "文件共享中心 · PC 端（Rust 单文件服务端，内嵌移动端前端）"
+
+[dependencies]
+axum = { version = "0.7", features = ["multipart", "ws"] }
+tokio = { version = "1", features = ["full"] }
+tower-http = { version = "0.5", features = ["cors"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rust-embed = "8"
+zip = { version = "0.6", default-features = false, features = ["deflate"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+tokio-util = { version = "0.7", features = ["io"] }
+
+[profile.release]
+opt-level = 2
+strip = true
+lto = true
+codegen-units = 1

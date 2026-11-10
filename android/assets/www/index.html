@@ -151,6 +151,12 @@
 
         <div class="discover-result" id="discover-result" hidden>
           <div class="discover-head"><span id="discover-status">正在搜索…</span><button class="text-btn" id="btn-discover-stop" type="button">停止</button></div>
+          <div class="discover-opts">
+            <label for="discover-ports">端口</label>
+            <input type="text" id="discover-ports" value="5000,5001,8000,8080" inputmode="numeric" spellcheck="false" autocomplete="off" aria-label="要扫描的端口，逗号分隔">
+            <button class="text-btn" id="btn-discover-retry" type="button">重新搜索</button>
+          </div>
+          <div class="row-hint">默认扫描常见端口，逗号分隔可自行增删；当前主机端口会自动加入。</div>
           <div id="discover-list"></div>
         </div>
         <div class="saved-hosts" id="saved-hosts"></div>
@@ -185,7 +191,7 @@
       <div class="card about-card">
         <h3 class="card-title">使用说明</h3>
         <ol class="steps">
-          <li>一台设备运行 <code>server.py</code> 当主机（电脑或安卓 Termux 均可）。</li>
+          <li>先在 <strong>PC 端</strong> 启动共享服务（双击 <code>start.bat</code>），记下它显示的地址；安卓手机也可以当主机。</li>
           <li>所有手机连同一个 WiFi，扫码、粘贴链接或搜索附近主机即可加入。</li>
           <li>任何手机都能在本页切换主机，加入别人的共享空间。</li>
           <li>安卓 App 可常驻当主机；iPhone 因系统限制只能前台当主机。</li>

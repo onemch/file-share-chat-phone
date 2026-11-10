@@ -31,6 +31,7 @@
     scanRaf: 0,
     discoverRunning: false,
     discoverScanned: 0,
+    discoverWatchdog: null,
     hostInputTimer: null,
     lastClip: '',
   };
@@ -412,14 +413,55 @@
   }
 
   // ---- 局域网主机发现 ----
-  function probeHost(url) {
+  const FALLBACK_PORTS = '5000,5001,8000,8080';
+
+  /** 扫描端口 = 输入框自定义 + 当前主机端口（自动加入，避免漏掉自己）。 */
+  function scanPorts() {
+    const set = new Set();
+    const raw = $('discover-ports').value || FALLBACK_PORTS;
+    raw.split(/[,，\s]+/).forEach((s) => {
+      const n = parseInt(s, 10);
+      if (n > 0 && n < 65536) set.add(n);
+    });
+    try {
+      const cur = parseInt(new URL(state.base).port, 10);
+      if (cur > 0) set.add(cur);
+    } catch (e) { /* ignore */ }
+    return Array.from(set).slice(0, 12);
+  }
+
+  function fetchJson(url, ms) {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 1200);
-    return fetch(url + '/health', { signal: ctrl.signal, cache: 'no-store' })
-      .then((r) => r.ok ? r.json() : null)
-      .then((d) => (d && d.ok) ? d : null)
-      .catch(() => null)
-      .finally(() => clearTimeout(timer));
+    const work = fetch(url, { signal: ctrl.signal, cache: 'no-store' })
+      .then((r) => {
+        if (!r.ok) return { reached: true, json: null };
+        return r.json().then(
+          (j) => ({ reached: true, json: j }),
+          () => ({ reached: true, json: null }));
+      })
+      .catch(() => ({ reached: false, json: null }));
+    // 硬超时：即使响应体挂起，也必须让这一批 Promise.all 继续往下走
+    let timer;
+    const guard = new Promise((resolve) => {
+      timer = setTimeout(() => {
+        try { ctrl.abort(); } catch (e) { /* ignore */ }
+        resolve({ reached: false, json: null, timeout: true });
+      }, ms);
+    });
+    return Promise.race([work, guard]).then((v) => { clearTimeout(timer); return v; });
+  }
+
+  /** 新版本用 /health；老 PC 桌面版没有该接口，回退探测 /files。 */
+  function probeHost(url) {
+    return fetchJson(url + '/health', 900).then((h) => {
+      if (h.json && h.json.ok) {
+        return { app: h.json.app || '文件共享中心', items: h.json.items, online: h.json.online };
+      }
+      if (!h.reached) return null;   // 网络不通就没必要再试第二个接口
+      return fetchJson(url + '/files', 900).then((f) => Array.isArray(f.json)
+        ? { app: '文件共享中心（PC 端）', items: f.json.length, online: null }
+        : null);
+    });
   }
 
   function discoverHosts() {
@@ -427,19 +469,31 @@
     const ip = state.lanIp || (location.hostname.match(/^\d{1,3}(?:\.\d{1,3}){3}$/) ? location.hostname : null);
     if (!ip) { toast('拿不到局域网 IP，请改用扫码或手动输入'); return; }
     const prefix = ip.split('.').slice(0, 3).join('.');
-    const port = (new URL(state.base).port) || '5000';
+    const ports = scanPorts();
+    if (!ports.length) { toast('请填写有效的端口'); return; }
+
     state.discoverRunning = true;
     state.discoverScanned = 0;
     $('discover-result').hidden = false;
     $('discover-list').textContent = '';
-    $('discover-status').textContent = '正在搜索 ' + prefix + '.1~254 : ' + port + ' …';
+    $('discover-status').textContent = '正在搜索 ' + prefix + '.1~254 · 端口 ' + ports.join('/') + ' …';
+
+    // 看门狗：个别地址可能让底层连接长时间挂起，保证扫描一定能结束
+    clearTimeout(state.discoverWatchdog);
+    state.discoverWatchdog = setTimeout(() => {
+      if (!state.discoverRunning) return;
+      $('discover-status').textContent = found.length
+        ? '扫描结束，找到 ' + found.length + ' 台（部分地址无响应，可缩小端口范围重试）'
+        : '扫描结束，未找到主机（可缩小端口范围重试，或用扫码 / 手动输入）';
+      stopDiscover(false);
+    }, 45000);
 
     const found = [];
     const queue = [];
     for (let i = 1; i <= 254; i++) queue.push(prefix + '.' + i);
     const total = queue.length;
     let cursor = 0, active = 0;
-    const concurrency = 24;
+    const concurrency = 16;   // 每个 IP 并行探测多个端口，降低 IP 并发避免请求风暴
 
     const renderFound = (d, url) => {
       const row = document.createElement('div');
@@ -449,7 +503,8 @@
       const strong = document.createElement('strong');
       strong.textContent = url.replace(/^https?:\/\//, '');
       const small = document.createElement('small');
-      small.textContent = (d.app || '文件共享中心') + ' · ' + (d.items || 0) + ' 项 · ' + (d.online || 0) + ' 人在线';
+      small.textContent = (d.app || '文件共享中心') + ' · ' + (d.items || 0) + ' 项'
+        + (d.online != null ? ' · ' + d.online + ' 人在线' : '');
       info.append(strong, small);
       const btn = document.createElement('button');
       btn.type = 'button';
@@ -463,20 +518,27 @@
       if (!state.discoverRunning) return;
       if (cursor >= total && active === 0) {
         $('discover-status').textContent = found.length
-          ? '找到 ' + found.length + ' 台主机' : '没找到其他主机（确认对方已启动服务且在同一 WiFi）';
+          ? '找到 ' + found.length + ' 台主机（已扫 ' + ports.join('/') + '）'
+          : '没找到其他主机：确认同一 WiFi、对方已启动，或调整端口后重新搜索';
         stopDiscover(false);
         return;
       }
       while (state.discoverRunning && active < concurrency && cursor < total) {
-        const url = 'http://' + queue[cursor++] + ':' + port;
-        if (url === state.base) { state.discoverScanned++; continue; }
+        const ipx = queue[cursor++];
         active++;
-        probeHost(url).then((d) => {
+        Promise.all(ports.map((p) => {
+          const url = 'http://' + ipx + ':' + p;
+          if (url === state.base) return Promise.resolve(null);
+          return probeHost(url).then((d) => d ? { url: url, d: d } : null);
+        })).then((hits) => {
           active--;
           state.discoverScanned++;
-          if (d && state.discoverRunning) { found.push(url); renderFound(d, url); }
-          if (state.discoverScanned % 12 === 0) {
-            $('discover-status').textContent = '已探测 ' + state.discoverScanned + '/' + total + '，找到 ' + found.length + ' 台…';
+          if (state.discoverRunning) {
+            hits.filter(Boolean).forEach((hit) => { found.push(hit.url); renderFound(hit.d, hit.url); });
+          }
+          if (state.discoverScanned % 8 === 0 || state.discoverScanned === total) {
+            $('discover-status').textContent = '已探测 ' + state.discoverScanned + '/' + total
+              + ' 个 IP，找到 ' + found.length + ' 台…';
           }
           next();
         });
@@ -487,6 +549,8 @@
 
   function stopDiscover(clear) {
     state.discoverRunning = false;
+    clearTimeout(state.discoverWatchdog);
+    state.discoverWatchdog = null;
     if (clear !== false) $('discover-status').textContent = '已停止';
   }
 
@@ -891,6 +955,7 @@
       if (state.discoverRunning) stopDiscover(); else discoverHosts();
     });
     $('btn-discover-stop').addEventListener('click', () => stopDiscover());
+    $('btn-discover-retry').addEventListener('click', () => { stopDiscover(); discoverHosts(); });
     $('scan-close').addEventListener('click', closeScan);
     $('scan-modal').querySelector('.modal-mask').addEventListener('click', closeScan);
     $('btn-scan-photo').addEventListener('click', () => $('scan-file').click());
