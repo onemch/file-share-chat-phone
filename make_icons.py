@@ -1,77 +1,123 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""生成 PWA 图标（纯标准库，无需 Pillow）。运行：python make_icons.py"""
+"""生成 PWA / Android / iOS 图标（Pillow，4x 超采样抗锯齿）。
+
+运行：.venv/Scripts/python.exe make_icons.py
+"""
 import os
-import struct
-import zlib
+from PIL import Image, ImageDraw, ImageFilter, ImageChops, ImageOps
 
-OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
-BG_A = (108, 92, 231)
-BG_B = (154, 134, 247)
+ROOT = os.path.dirname(os.path.abspath(__file__))
+STATIC = os.path.join(ROOT, 'static')
+AND_WWW = os.path.join(ROOT, 'android', 'assets', 'www')
+IOS_WWW = os.path.join(ROOT, 'ios', 'FileSharePhone', 'www')
+AND_RES = os.path.join(ROOT, 'android', 'res')
+IOS_ICONSET = os.path.join(ROOT, 'ios', 'FileSharePhone',
+                           'Assets.xcassets', 'AppIcon.appiconset')
 
-
-def rounded(x, y, x0, y0, x1, y1, r):
-    if not (x0 <= x <= x1 and y0 <= y <= y1):
-        return False
-    cx = min(max(x, x0 + r), x1 - r)
-    cy = min(max(y, y0 + r), y1 - r)
-    return (x - cx) ** 2 + (y - cy) ** 2 <= r * r
-
-
-def rgba(size):
-    rows = []
-    for py in range(size):
-        row = bytearray()
-        y = py / size
-        for px in range(size):
-            x = px / size
-
-            # 圆角背景 + 对角渐变
-            if not rounded(x, y, 0.0, 0.0, 1.0, 1.0, 0.22):
-                row.extend((0, 0, 0, 0))
-                continue
-            t = min(1.0, (x * 0.55 + y * 0.45))
-            r = int(BG_A[0] + (BG_B[0] - BG_A[0]) * t)
-            g = int(BG_A[1] + (BG_B[1] - BG_A[1]) * t)
-            b = int(BG_A[2] + (BG_B[2] - BG_A[2]) * t)
-
-            # 白色文件夹（标签 + 主体）
-            tag = rounded(x, y, 0.21, 0.30, 0.48, 0.43, 0.035)
-            body = rounded(x, y, 0.20, 0.38, 0.80, 0.75, 0.065)
-            if tag or body:
-                r = g = b = 255
-
-            # 紫色向上箭头（在文件夹上镂空）
-            shaft = 0.468 <= x <= 0.532 and 0.455 <= y <= 0.645
-            head = 0.355 <= y <= 0.505 and abs(x - 0.5) <= 0.125 * ((y - 0.355) / 0.15)
-            if shaft or head:
-                r, g, b = 108, 92, 231
-
-            row.extend((r, g, b, 255))
-        rows.append(bytes(row))
-    return rows
+C_A = (108, 92, 231)
+C_B = (154, 134, 247)
+PURPLE = (108, 92, 231, 255)
+WHITE = (255, 255, 255, 255)
+TAG = (233, 229, 255, 255)
+GREEN = (37, 190, 121, 255)
 
 
-def write_png(path, size, rows):
-    raw = b''.join(b'\x00' + row for row in rows)
+def mix(a, b, t):
+    return tuple(int(a[i] + (b[i] - a[i]) * t) for i in range(3))
 
-    def chunk(tag, data):
-        return (struct.pack('>I', len(data)) + tag + data +
-                struct.pack('>I', zlib.crc32(tag + data) & 0xffffffff))
 
-    png = (b'\x89PNG\r\n\x1a\n' +
-           chunk(b'IHDR', struct.pack('>IIBBBBB', size, size, 8, 6, 0, 0, 0)) +
-           chunk(b'IDAT', zlib.compress(raw, 9)) +
-           chunk(b'IEND', b''))
-    with open(path, 'wb') as f:
-        f.write(png)
+def make_master(size=1024):
+    """在 4x 画布上绘制，再 LANCZOS 缩到目标尺寸，得到平滑边缘。"""
+    n = size * 4
+    u = n / 100.0  # 百分坐标
+
+    # 背景：纵向 + 横向渐变取平均得到对角渐变，再叠加左上柔光
+    v = Image.linear_gradient('L').resize((n, n), Image.BICUBIC)
+    h = v.transpose(Image.Transpose.ROTATE_90)
+    diag = ImageChops.add(v, h, scale=2.0)
+    bg = ImageOps.colorize(diag, black=C_A, white=C_B).convert('RGBA')
+
+    glow = Image.new('RGBA', (n, n), (0, 0, 0, 0))
+    gd = ImageDraw.Draw(glow)
+    gd.ellipse([-n * .28, -n * .48, n * .92, n * .46], fill=(255, 255, 255, 46))
+    glow = glow.filter(ImageFilter.GaussianBlur(n * .075))
+    bg = Image.alpha_composite(bg, glow)
+
+    img = Image.new('RGBA', (n, n), (0, 0, 0, 0))
+    mask = Image.new('L', (n, n), 0)
+    ImageDraw.Draw(mask).rounded_rectangle(
+        [0, 0, n - 1, n - 1], radius=int(22.5 * u), fill=255)
+    img.paste(bg, (0, 0), mask)
+
+    # 文件夹投影
+    shadow = Image.new('RGBA', (n, n), (0, 0, 0, 0))
+    sd = ImageDraw.Draw(shadow)
+    sd.rounded_rectangle([20 * u, 39 * u, 80 * u, 78 * u],
+                         radius=int(7 * u), fill=(42, 30, 110, 105))
+    shadow = shadow.filter(ImageFilter.GaussianBlur(2.2 * u))
+    img = Image.alpha_composite(img, shadow)
+    d = ImageDraw.Draw(img)
+
+    # 文件夹标签页 + 主体
+    d.rounded_rectangle([20 * u, 28 * u, 49 * u, 43 * u],
+                        radius=int(3.6 * u), fill=TAG)
+    d.rounded_rectangle([19 * u, 37 * u, 81 * u, 75.5 * u],
+                        radius=int(7.2 * u), fill=WHITE)
+
+    # 上传箭头（紫色，圆头折线）
+    w = int(5.6 * u)
+    d.line([(50 * u, 64 * u), (50 * u, 45 * u)], fill=PURPLE, width=w)
+    d.line([(39 * u, 54 * u), (50 * u, 43 * u), (61 * u, 54 * u)],
+           fill=PURPLE, width=w, joint='curve')
+    for p in [(50 * u, 64 * u), (50 * u, 45 * u), (39 * u, 54 * u), (61 * u, 54 * u)]:
+        r = w / 2
+        d.ellipse([p[0] - r, p[1] - r, p[0] + r, p[1] + r], fill=PURPLE)
+
+    # 右下角在线徽标
+    d.ellipse([68 * u, 65 * u, 84 * u, 81 * u], fill=WHITE)
+    d.ellipse([69.6 * u, 66.6 * u, 82.4 * u, 79.4 * u], fill=GREEN)
+
+    return img.resize((size, size), Image.LANCZOS)
+
+
+def targets():
+    t = [
+        (48, [os.path.join(AND_RES, 'mipmap-mdpi', 'ic_launcher.png')]),
+        (72, [os.path.join(AND_RES, 'mipmap-hdpi', 'ic_launcher.png')]),
+        (96, [os.path.join(AND_RES, 'mipmap-xhdpi', 'ic_launcher.png')]),
+        (144, [os.path.join(AND_RES, 'mipmap-xxhdpi', 'ic_launcher.png')]),
+        (192, [
+            os.path.join(STATIC, 'icon-192.png'),
+            os.path.join(AND_WWW, 'icon-192.png'),
+            os.path.join(IOS_WWW, 'icon-192.png'),
+            os.path.join(AND_RES, 'mipmap', 'ic_launcher.png'),
+            os.path.join(AND_RES, 'mipmap-xxxhdpi', 'ic_launcher.png'),
+        ]),
+        (512, [
+            os.path.join(STATIC, 'icon-512.png'),
+            os.path.join(AND_WWW, 'icon-512.png'),
+            os.path.join(IOS_WWW, 'icon-512.png'),
+        ]),
+        (180, [
+            os.path.join(STATIC, 'apple-touch-icon.png'),
+            os.path.join(AND_WWW, 'apple-touch-icon.png'),
+            os.path.join(IOS_WWW, 'apple-touch-icon.png'),
+        ]),
+        (1024, [
+            os.path.join(STATIC, 'icon-1024.png'),
+            os.path.join(IOS_ICONSET, 'Icon-1024.png'),
+        ]),
+    ]
+    return t
 
 
 if __name__ == '__main__':
-    os.makedirs(OUT, exist_ok=True)
-    for size in (192, 512):
-        rows = rgba(size)
-        write_png(os.path.join(OUT, f'icon-{size}.png'), size, rows)
-        print(f'icon-{size}.png')
-    write_png(os.path.join(OUT, 'apple-touch-icon.png'), 192, rgba(192))
-    print('apple-touch-icon.png')
+    master = make_master(1024)
+    for size, paths in targets():
+        im = master if size == 1024 else master.resize((size, size), Image.LANCZOS)
+        for p in paths:
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            im.save(p)
+        print(f'{size:4d}px -> {len(paths)} files')
+    print('图标已生成')

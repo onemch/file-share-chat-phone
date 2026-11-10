@@ -1,7 +1,8 @@
 /* 只离线缓存界面壳；API、跨主机请求、WebSocket 一律直连，不缓存 */
-const CACHE = 'fsc-phone-v1';
+const CACHE = 'fsc-phone-v2';
 const SHELL = [
   '/', '/static/style.css', '/static/app.js',
+  '/static/qrcode.min.js', '/static/jsqr.min.js',
   '/manifest.webmanifest', '/icon-192.png',
 ];
 const API_PREFIX = [

@@ -15,7 +15,10 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowInsets;
+import android.widget.FrameLayout;
 import android.webkit.DownloadListener;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -66,43 +69,34 @@ public class MainActivity extends Activity {
     }
 
     private void buildUi() {
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(Color.parseColor("#F5F6FA"));
+        // 外层只负责顶部的状态栏避让（紫色，与网页 AppBar 连成一片）；
+        // 内层负责底部导航栏避让（白色，与底部 TabBar 连成一片）。
+        final LinearLayout outer = new LinearLayout(this);
+        outer.setOrientation(LinearLayout.VERTICAL);
+        outer.setBackgroundColor(Color.parseColor("#6C5CE7"));
+        final FrameLayout inner = new FrameLayout(this);
+        inner.setBackgroundColor(Color.WHITE);
+        outer.addView(inner, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
-        LinearLayout bar = new LinearLayout(this);
-        bar.setOrientation(LinearLayout.HORIZONTAL);
-        bar.setBackgroundColor(Color.parseColor("#6C5CE7"));
-        bar.setGravity(Gravity.CENTER_VERTICAL);
-        int pad = dp(12);
-        bar.setPadding(pad, pad + dp(6), pad, pad);
-
-        final TextView addr = new TextView(this);
-        addr.setTextColor(Color.WHITE);
-        addr.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-        addr.setText("本机服务  http://" + ShareService.lanIp + ":" + ShareService.PORT);
-        addr.setSingleLine(true);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        bar.addView(addr, lp);
-
-        Button copy = new Button(this);
-        copy.setText("复制地址");
-        copy.setTextColor(Color.parseColor("#6C5CE7"));
-        copy.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-        copy.setAllCaps(false);
-        copy.setBackgroundColor(Color.WHITE);
-        copy.setOnClickListener(new android.view.View.OnClickListener() {
-            @Override public void onClick(android.view.View v) {
-                String url = "http://" + ShareService.lanIp + ":" + ShareService.PORT
-                        + "/?host=http%3A%2F%2F" + ShareService.lanIp + "%3A" + ShareService.PORT;
-                ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-                if (cm != null) cm.setPrimaryClip(ClipData.newPlainText("share", url));
-                Toast.makeText(MainActivity.this, "访问链接已复制，发给朋友即可加入", Toast.LENGTH_SHORT).show();
-            }
-        });
-        bar.addView(copy);
-        root.addView(bar, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        if (Build.VERSION.SDK_INT >= 21) {
+            getWindow().setStatusBarColor(Color.parseColor("#6C5CE7"));
+            getWindow().setNavigationBarColor(Color.WHITE);
+        }
+        if (Build.VERSION.SDK_INT >= 20) {
+            outer.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
+                @Override public WindowInsets onApplyWindowInsets(View v, WindowInsets insets) {
+                    int top = insets.getSystemWindowInsetTop();
+                    if (top <= 0) top = statusBarHeight();
+                    int bottom = insets.getSystemWindowInsetBottom();
+                    outer.setPadding(0, top, 0, 0);
+                    inner.setPadding(0, 0, 0, bottom);
+                    return insets.consumeSystemWindowInsets();
+                }
+            });
+        } else {
+            outer.setPadding(0, statusBarHeight(), 0, 0);
+        }
 
         web = new WebView(this);
         WebSettings s = web.getSettings();
@@ -167,9 +161,14 @@ public class MainActivity extends Activity {
             }
         });
 
-        root.addView(web, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
-        setContentView(root);
+        inner.addView(web, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        setContentView(outer);
+    }
+
+    private int statusBarHeight() {
+        int id = getResources().getIdentifier("status_bar_height", "dimen", "android");
+        return id > 0 ? getResources().getDimensionPixelSize(id) : dp(24);
     }
 
     /** DownloadManager 跑在系统进程，127.0.0.1 指不到 App 内嵌服务，改用本机局域网 IP。 */

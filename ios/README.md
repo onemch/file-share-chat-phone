@@ -182,6 +182,19 @@ archive 阶段的 `DEVELOPMENT_TEAM` 和脚本注入的副本共同提供。
 
 ---
 
+## 四·补：加入其他主机的几种方式
+
+「连接」页与网页版 / 安卓 App 完全一致，四种方式任选：
+
+| 方式 | 说明 |
+|---|---|
+| 扫码连接 | 局域网 HTTP 下用「拍照 / 相册选图」识别（WKWebView 不直接授权摄像头）；HTTPS 或安全上下文可用实时摄像头 |
+| 剪贴板 | 点「剪贴板」读系统剪贴板自动识别；也可在输入框粘贴、或在页面任意处粘贴即连 |
+| 附近主机 | 自动探测同网段 `1~254` 的 `/health`，列出可连接的主机与在线人数 |
+| 手动输入 | 支持完整 URL、纯 IP、`IP:端口` 三种写法 |
+
+本机邀请二维码由前端 `qrcode.min.js` 在 canvas 上生成（不依赖服务端 `/qr.png`），扫码解码用 `jsqr.min.js`；两个库都随 `www` 打进 bundle，**完全离线可用**。顶部连接灯可点击直达「连接」页。
+
 ## 五、网络与防火墙要求
 
 1. **同一 WiFi / 同一局域网**：其他设备必须和这台 iPhone 在同一个二层网络，
@@ -214,11 +227,12 @@ archive 阶段的 `DEVELOPMENT_TEAM` 和脚本注入的副本共同提供。
 ### HTTP 静态资源（前端会请求这些根路径，服务端已正确映射）
 - `GET /` → `www/index.html`，`text/html; charset=utf-8`，`Cache-Control: no-cache`
 - `GET /static/<文件名>` → `www/<文件名>`，仅允许 `[A-Za-z0-9_.-]+`，`.` 开头一律 404
-  （前端用到 `/static/style.css`、`/static/app.js`）
+  （前端用到 `/static/style.css`、`/static/app.js`、`/static/qrcode.min.js`、`/static/jsqr.min.js`）
 - `GET /manifest.webmanifest`、`/sw.js`、`/icon-192.png`、`/icon-512.png`、
   `/apple-touch-icon.png`、`/favicon.ico` → `www/` 对应文件；
   `favicon.ico` 回退到 `icon-192.png`；`sw.js` 额外带 `Service-Worker-Allowed: /`
-- `GET /qr.png` → **404**（前端 `qr-img` 的 `error` 事件会自动隐藏二维码卡片）
+- `GET /qr.png` → **404**（邀请二维码已改为前端用 `qrcode.min.js` 在 canvas 上生成，
+  不依赖服务端；扫码用 `jsqr.min.js`，局域网 HTTP 下走「拍照 / 相册选图」识别）
 - 所有响应带 `Access-Control-Allow-Origin: *`；`OPTIONS` 预检返回 200 并带
   `Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS` 与 `Access-Control-Allow-Headers`
 
@@ -297,8 +311,9 @@ archive 阶段的 `DEVELOPMENT_TEAM` 和脚本注入的副本共同提供。
     `http://192.168.x.x` 则不是安全上下文，`sw.js` 注册会失败，但前端已 `.catch()` 忽略，
     不影响使用。
 11. **后台**：见第四节，切后台服务很快不可用，这是系统限制。
-12. **没有 AppIcon / LaunchScreen 资源**：工程不含 Assets.xcassets 与 LaunchScreen.storyboard，
-    `Info.plist` 用空的 `UILaunchScreen`。Archive 时 Xcode 可能给出「缺少 App 图标」的
-    **警告（不是错误）**，Ad Hoc / Development 导出不受影响，装到手机上图标是空白占位。
-    若在意，可在 Xcode 里新建 `Assets.xcassets` 加入 `AppIcon` 并在 target 的
-    `ASSETCATALOG_COMPILER_APPICON_NAME` 里指定即可（不影响本工程的核心功能）。
+12. **AppIcon 已接入**：`FileSharePhone/Assets.xcassets/AppIcon.appiconset/` 里有
+    `Icon-1024.png`（与 PWA 图标同一套设计）和 `Contents.json`，`project.pbxproj` 已把它
+    加进 Resources 并在 Debug/Release 都设置了
+    `ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon`。仍没有 LaunchScreen.storyboard
+    （`Info.plist` 用空的 `UILaunchScreen`），Archive 时可能给出「缺少启动图」的
+    **警告（不是错误）**，不影响 Ad Hoc / Development 导出。

@@ -28,10 +28,10 @@
         <p id="host-caption">正在连接…</p>
       </div>
     </div>
-    <div class="appbar-status" id="status-chip" title="连接状态">
+    <button class="appbar-status" id="status-chip" type="button" title="点击管理主机连接">
       <span class="dot" id="status-dot"></span>
       <span id="status-text">连接中</span>
-    </div>
+    </button>
   </header>
 
   <main id="main">
@@ -109,7 +109,7 @@
 
     <!-- ==================== 连接 ==================== -->
     <section class="panel" id="panel-connect">
-      <div class="status-card">
+      <div class="status-card" id="status-card">
         <div class="status-card-top">
           <div>
             <div class="label">当前主机</div>
@@ -125,13 +125,34 @@
       </div>
 
       <div class="card">
-        <h3 class="card-title">连接其他主机</h3>
-        <p class="card-desc">填入对方手机或电脑的地址，即可加入同一个共享文件夹。</p>
-        <div class="input-row">
-          <input type="url" id="host-input" placeholder="http://192.168.1.5:5000" inputmode="url" autocapitalize="off" spellcheck="false">
+        <h3 class="card-title">加入其他主机</h3>
+        <p class="card-desc">四种方式任选，连上后所有设备共用同一个共享文件夹与群聊。</p>
+        <div class="join-grid">
+          <button class="join-btn" id="btn-scan" type="button">
+            <span class="join-ico">📷</span><span class="join-label">扫码连接</span><span class="join-sub">拍二维码</span>
+          </button>
+          <button class="join-btn" id="btn-clipboard" type="button">
+            <span class="join-ico">📋</span><span class="join-label">剪贴板</span><span class="join-sub">粘贴即连</span>
+          </button>
+          <button class="join-btn" id="btn-discover" type="button">
+            <span class="join-ico">🔍</span><span class="join-label">附近主机</span><span class="join-sub">自动搜索</span>
+          </button>
+          <button class="join-btn" id="btn-share" type="button">
+            <span class="join-ico">↗</span><span class="join-label">分享本机</span><span class="join-sub">发给朋友</span>
+          </button>
+        </div>
+
+        <div class="input-row host-row">
+          <input type="text" id="host-input" placeholder="粘贴或输入 http://192.168.1.5:5000" inputmode="url" autocapitalize="off" spellcheck="false" autocomplete="off">
           <button class="btn btn-primary" id="btn-connect" type="button">连接</button>
         </div>
+        <div class="row-hint">粘贴任意含主机地址的文字，会自动识别并连接；也支持只填 IP 或 IP:端口</div>
         <button class="link-btn" id="btn-use-self" type="button">恢复为当前页面所在设备</button>
+
+        <div class="discover-result" id="discover-result" hidden>
+          <div class="discover-head"><span id="discover-status">正在搜索…</span><button class="text-btn" id="btn-discover-stop" type="button">停止</button></div>
+          <div id="discover-list"></div>
+        </div>
         <div class="saved-hosts" id="saved-hosts"></div>
       </div>
 
@@ -144,10 +165,14 @@
       </div>
 
       <div class="card qr-card">
-        <h3 class="card-title">邀请其他手机加入</h3>
-        <p class="card-desc">让对方连同一个 WiFi，用相机扫下面的二维码，打开后会自动连上本主机。</p>
-        <div class="qr-frame"><img id="qr-img" alt="访问二维码" src="/qr.png"></div>
-        <button class="btn btn-ghost full" id="btn-copy-link" type="button">复制访问链接</button>
+        <h3 class="card-title">邀请其他手机加入本主机</h3>
+        <p class="card-desc">对方连同一个 WiFi，扫下面的码，或用「复制链接」把地址发过去，打开后自动连上本主机。</p>
+        <div class="qr-frame"><canvas id="qr-canvas" width="320" height="320" aria-label="访问二维码"></canvas></div>
+        <div class="qr-url" id="qr-url"></div>
+        <div class="qr-actions">
+          <button class="btn btn-ghost" id="btn-copy-link" type="button">复制链接</button>
+          <button class="btn btn-primary" id="btn-share-link" type="button" hidden>系统分享</button>
+        </div>
       </div>
 
       <div class="card">
@@ -161,13 +186,29 @@
         <h3 class="card-title">使用说明</h3>
         <ol class="steps">
           <li>一台设备运行 <code>server.py</code> 当主机（电脑或安卓 Termux 均可）。</li>
-          <li>所有手机连同一个 WiFi，打开主机地址即可共享文件与群聊。</li>
+          <li>所有手机连同一个 WiFi，扫码、粘贴链接或搜索附近主机即可加入。</li>
           <li>任何手机都能在本页切换主机，加入别人的共享空间。</li>
-          <li>主机与客户端可在不同系统，iPhone 只能当客户端。</li>
+          <li>安卓 App 可常驻当主机；iPhone 因系统限制只能前台当主机。</li>
         </ol>
       </div>
     </section>
   </main>
+
+  <!-- 扫码弹层：优先实时摄像头，HTTP 局域网下降级为拍照识别 -->
+  <div class="modal scan-modal" id="scan-modal" hidden>
+    <div class="modal-mask"></div>
+    <div class="scan-box">
+      <div class="scan-head"><h3>扫描二维码</h3><button id="scan-close" type="button" aria-label="关闭">×</button></div>
+      <div class="scan-stage" id="scan-stage">
+        <video id="scan-video" playsinline muted></video>
+        <div class="scan-frame"></div>
+        <p class="scan-tip" id="scan-tip">将主机上的二维码放入框内</p>
+      </div>
+      <button class="btn btn-primary full" id="btn-scan-photo" type="button">拍照 / 从相册选二维码</button>
+      <p class="scan-note" id="scan-note"></p>
+      <input type="file" id="scan-file" accept="image/*" capture="environment" hidden>
+    </div>
+  </div>
 
   <nav class="tabbar" aria-label="主导航">
     <button class="tab active" data-tab="files" type="button">
@@ -213,6 +254,8 @@
     </div>
   </div>
 </div>
+<script src="/static/qrcode.min.js"></script>
+<script src="/static/jsqr.min.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

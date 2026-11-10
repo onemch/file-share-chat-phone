@@ -26,6 +26,13 @@
     confirmCb: null,
     installPrompt: null,
     lanUrl: null,
+    lanIp: null,
+    scanStream: null,
+    scanRaf: 0,
+    discoverRunning: false,
+    discoverScanned: 0,
+    hostInputTimer: null,
+    lastClip: '',
   };
 
   // ---------------------------------------------------------------- 基础工具
@@ -132,7 +139,7 @@
     $('host-caption').textContent = shortHost(base) + ' · 共享空间';
     $('current-host').textContent = base;
     $('host-input').value = base;
-    $('qr-img').src = base + '/qr.png?t=' + Date.now();
+    renderInvite();
     renderSavedHosts();
     if (!quiet) toast('已切换到 ' + shortHost(base));
     checkHealth();
@@ -153,15 +160,18 @@
       $('stat-files').textContent = d.items != null ? d.items : '—';
       $('stat-lan').textContent = d.lan_ip || '—';
       // 分享给别人的链接必须用局域网 IP，不能用 127.0.0.1（App 内嵌服务尤其重要）
+      state.lanIp = d.lan_ip || null;
       state.lanUrl = (d.lan_ip && d.port) ? ('http://' + d.lan_ip + ':' + d.port) : null;
       state.online = d.online || 0;
       $('online-count').textContent = state.online;
+      renderInvite();
       return true;
     }).catch(() => {
       setStatus(false, '主机不可达');
       $('stat-online').textContent = '—';
       $('stat-files').textContent = '—';
       $('stat-lan').textContent = '—';
+      renderInvite();
       return false;
     });
   }
@@ -195,6 +205,289 @@
       row.append(span, use, del);
       box.appendChild(row);
     });
+  }
+
+  // ---------------------------------------------------------------- 连接增强
+  function shareUrl() {
+    const target = state.lanUrl || state.base;
+    return target + '/?host=' + encodeURIComponent(target);
+  }
+
+  /** 前端生成邀请二维码，不依赖服务端 /qr.png，App 内嵌服务也能显示。 */
+  function renderInvite() {
+    const url = shareUrl();
+    const canvas = $('qr-canvas');
+    $('qr-url').textContent = '主机地址 ' + (state.lanUrl || state.base);
+    $('btn-share-link').hidden = !navigator.share;
+    if (!canvas || typeof window.qrcode !== 'function') {
+      $('qr-url').textContent = url;
+      return;
+    }
+    try {
+      const qr = window.qrcode(0, 'M');
+      qr.addData(url);
+      qr.make();
+      const count = qr.getModuleCount();
+      const quiet = 2;
+      const total = count + quiet * 2;
+      const size = canvas.width;
+      const cell = Math.max(1, Math.floor(size / total));
+      const offset = Math.floor((size - cell * total) / 2);
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, size, size);
+      ctx.fillStyle = '#1F2233';
+      for (let r = 0; r < count; r++) {
+        for (let c = 0; c < count; c++) {
+          if (qr.isDark(r, c)) {
+            ctx.fillRect(offset + (c + quiet) * cell, offset + (r + quiet) * cell, cell, cell);
+          }
+        }
+      }
+    } catch (e) {
+      $('qr-url').textContent = url;
+    }
+  }
+
+  /** 从任意文本里提取主机地址：分享链接 / URL / 纯 IP / IP:端口。 */
+  function parseHostText(text) {
+    if (!text) return null;
+    const s = String(text).trim();
+    const m = s.match(/https?:\/\/[^\s"'<>\u4e00-\u9fa5]+/i);
+    if (m) {
+      try {
+        const u = new URL(m[0]);
+        const q = u.searchParams.get('host');
+        const base = normalizeBase(q || u.origin);
+        if (base) return base;
+      } catch (e) { /* 继续尝试纯 IP */ }
+    }
+    const p = s.match(/\b(\d{1,3}(?:\.\d{1,3}){3})(?::(\d{2,5}))?\b/);
+    if (p) return normalizeBase('http://' + p[1] + ':' + (p[2] || '5000'));
+    return null;
+  }
+
+  function autoConnectFromText(text, source) {
+    const base = parseHostText(text);
+    if (!base) { toast('没识别到主机地址，请检查内容'); return false; }
+    if (base === state.base) { toast('已经在连接这台主机了'); return true; }
+    applyBase(base);
+    toast((source || '已识别') + ' → ' + shortHost(base));
+    return true;
+  }
+
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text)
+        .then(() => toast('链接已复制，发给朋友即可加入'), () => fallbackCopy(text));
+    } else fallbackCopy(text);
+  }
+
+  function shareLink() {
+    if (navigator.share) {
+      navigator.share({ title: '文件共享中心', text: '加入我的共享空间', url: shareUrl() })
+        .catch(() => { /* 用户取消 */ });
+    } else copyText(shareUrl());
+  }
+
+  function focusHostInput() {
+    switchTab('connect');
+    const el = $('host-input');
+    el.focus();
+    el.select();
+    toast('长按输入框粘贴，会自动识别并连接');
+  }
+
+  function readClipboard() {
+    if (navigator.clipboard && navigator.clipboard.readText) {
+      navigator.clipboard.readText().then((t) => {
+        if (!t || !t.trim()) { focusHostInput(); return; }
+        autoConnectFromText(t, '已从剪贴板识别');
+      }).catch(() => focusHostInput());
+    } else focusHostInput();
+  }
+
+  /** 从别处复制地址后回到页面，自动提示连接（需浏览器允许读剪贴板）。 */
+  function maybeAutoPaste() {
+    if (document.visibilityState !== 'visible' || !navigator.clipboard || !navigator.clipboard.readText) return;
+    navigator.clipboard.readText().then((t) => {
+      const base = parseHostText(t);
+      if (!base || base === state.lastClip || base === state.base) return;
+      state.lastClip = base;
+      confirmBox('检测到主机地址', '剪贴板里有一台主机：' + base + '\n要连接并加入它的共享空间吗？', () => applyBase(base));
+    }).catch(() => { /* 权限被拒，忽略 */ });
+  }
+
+  // ---- 扫码 ----
+  function openScan() {
+    $('scan-modal').hidden = false;
+    const video = $('scan-video');
+    const inWebView = /;\s*wv\)/i.test(navigator.userAgent);
+    const canCamera = !inWebView && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.isSecureContext);
+    if (!canCamera) {
+      $('scan-stage').classList.add('no-camera');
+      $('scan-tip').textContent = '点下方按钮拍照或从相册选二维码图片';
+      $('scan-note').textContent = inWebView
+        ? 'App 内请用「拍照识别」扫码，效果一样。'
+        : '局域网 HTTP 下浏览器不允许直接调用摄像头，用「拍照识别」一样能扫码。';
+      return;
+    }
+    $('scan-stage').classList.remove('no-camera');
+    $('scan-tip').textContent = '将主机上的二维码放入框内';
+    $('scan-note').textContent = '识别不到时，可点下方按钮拍照 / 从相册选择。';
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
+      .then((stream) => {
+        state.scanStream = stream;
+        video.srcObject = stream;
+        video.play().then(tickScan).catch(() => { });
+      })
+      .catch(() => {
+        $('scan-stage').classList.add('no-camera');
+        $('scan-tip').textContent = '摄像头不可用，请用下方按钮拍照识别';
+      });
+  }
+
+  function tickScan() {
+    if ($('scan-modal').hidden || !state.scanStream) return;
+    const video = $('scan-video');
+    if (video.readyState >= 2 && video.videoWidth) {
+      const w = 640;
+      const h = Math.round(640 * video.videoHeight / video.videoWidth);
+      const cv = document.createElement('canvas');
+      cv.width = w; cv.height = h;
+      const ctx = cv.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(video, 0, 0, w, h);
+      const img = ctx.getImageData(0, 0, w, h);
+      const code = window.jsQR && window.jsQR(img.data, w, h, { inversionAttempts: 'dontInvert' });
+      if (code && code.data) { onQrDecoded(code.data); return; }
+    }
+    state.scanRaf = requestAnimationFrame(tickScan);
+  }
+
+  function closeScan() {
+    $('scan-modal').hidden = true;
+    cancelAnimationFrame(state.scanRaf);
+    if (state.scanStream) {
+      state.scanStream.getTracks().forEach((t) => t.stop());
+      state.scanStream = null;
+    }
+    $('scan-video').srcObject = null;
+    $('scan-file').value = '';
+  }
+
+  function decodeQrFile(file) {
+    if (!file) return;
+    if (typeof window.jsQR !== 'function') { toast('二维码识别组件未加载'); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, 1200 / Math.max(img.width, img.height));
+        const w = Math.round(img.width * scale);
+        const h = Math.round(img.height * scale);
+        const cv = document.createElement('canvas');
+        cv.width = w; cv.height = h;
+        const ctx = cv.getContext('2d', { willReadFrequently: true });
+        ctx.drawImage(img, 0, 0, w, h);
+        let code = null;
+        try {
+          const data = ctx.getImageData(0, 0, w, h);
+          code = window.jsQR(data.data, w, h, { inversionAttempts: 'attemptBoth' });
+        } catch (e) { /* ignore */ }
+        if (!code || !code.data) { toast('没识别到二维码，请换张更清晰的图片'); return; }
+        onQrDecoded(code.data);
+      };
+      img.onerror = () => toast('图片读取失败');
+      img.src = String(reader.result);
+    };
+    reader.onerror = () => toast('图片读取失败');
+    reader.readAsDataURL(file);
+  }
+
+  function onQrDecoded(text) {
+    const base = parseHostText(text);
+    closeScan();
+    if (!base) { toast('二维码里没有可用的主机地址'); return; }
+    confirmBox('扫码连接', '识别到主机：' + base + '，要连接并加入它的共享空间吗？', () => applyBase(base));
+  }
+
+  // ---- 局域网主机发现 ----
+  function probeHost(url) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 1200);
+    return fetch(url + '/health', { signal: ctrl.signal, cache: 'no-store' })
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => (d && d.ok) ? d : null)
+      .catch(() => null)
+      .finally(() => clearTimeout(timer));
+  }
+
+  function discoverHosts() {
+    if (state.discoverRunning) return;
+    const ip = state.lanIp || (location.hostname.match(/^\d{1,3}(?:\.\d{1,3}){3}$/) ? location.hostname : null);
+    if (!ip) { toast('拿不到局域网 IP，请改用扫码或手动输入'); return; }
+    const prefix = ip.split('.').slice(0, 3).join('.');
+    const port = (new URL(state.base).port) || '5000';
+    state.discoverRunning = true;
+    state.discoverScanned = 0;
+    $('discover-result').hidden = false;
+    $('discover-list').textContent = '';
+    $('discover-status').textContent = '正在搜索 ' + prefix + '.1~254 : ' + port + ' …';
+
+    const found = [];
+    const queue = [];
+    for (let i = 1; i <= 254; i++) queue.push(prefix + '.' + i);
+    const total = queue.length;
+    let cursor = 0, active = 0;
+    const concurrency = 24;
+
+    const renderFound = (d, url) => {
+      const row = document.createElement('div');
+      row.className = 'discover-item';
+      const info = document.createElement('div');
+      info.className = 'd-info';
+      const strong = document.createElement('strong');
+      strong.textContent = url.replace(/^https?:\/\//, '');
+      const small = document.createElement('small');
+      small.textContent = (d.app || '文件共享中心') + ' · ' + (d.items || 0) + ' 项 · ' + (d.online || 0) + ' 人在线';
+      info.append(strong, small);
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = '连接';
+      btn.addEventListener('click', () => { stopDiscover(); applyBase(url); });
+      row.append(info, btn);
+      $('discover-list').appendChild(row);
+    };
+
+    const next = () => {
+      if (!state.discoverRunning) return;
+      if (cursor >= total && active === 0) {
+        $('discover-status').textContent = found.length
+          ? '找到 ' + found.length + ' 台主机' : '没找到其他主机（确认对方已启动服务且在同一 WiFi）';
+        stopDiscover(false);
+        return;
+      }
+      while (state.discoverRunning && active < concurrency && cursor < total) {
+        const url = 'http://' + queue[cursor++] + ':' + port;
+        if (url === state.base) { state.discoverScanned++; continue; }
+        active++;
+        probeHost(url).then((d) => {
+          active--;
+          state.discoverScanned++;
+          if (d && state.discoverRunning) { found.push(url); renderFound(d, url); }
+          if (state.discoverScanned % 12 === 0) {
+            $('discover-status').textContent = '已探测 ' + state.discoverScanned + '/' + total + '，找到 ' + found.length + ' 台…';
+          }
+          next();
+        });
+      }
+    };
+    next();
+  }
+
+  function stopDiscover(clear) {
+    state.discoverRunning = false;
+    if (clear !== false) $('discover-status').textContent = '已停止';
   }
 
   // ---------------------------------------------------------------- 文件列表
@@ -571,6 +864,15 @@
 
     $('btn-connect').addEventListener('click', () => connectHost($('host-input').value));
     $('host-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') connectHost(e.target.value); });
+    $('host-input').addEventListener('input', (e) => {
+      clearTimeout(state.hostInputTimer);
+      const v = e.target.value;
+      if (!v || !/https?:\/\/|\d{1,3}(?:\.\d{1,3}){3}/.test(v)) return;
+      state.hostInputTimer = setTimeout(() => {
+        const base = parseHostText(v);
+        if (base && base !== state.base) autoConnectFromText(v, '已自动识别');
+      }, 450);
+    });
     $('btn-use-self').addEventListener('click', () => applyBase(location.origin));
     $('btn-save-nick').addEventListener('click', () => {
       const nick = $('nick-input').value.trim().slice(0, 20);
@@ -580,23 +882,29 @@
       connectWS();
       toast('昵称已保存');
     });
-    $('btn-copy-link').addEventListener('click', () => {
-      const target = state.lanUrl || state.base;
-      const link = target + '/?host=' + encodeURIComponent(target);
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(link).then(() => toast('链接已复制，发给朋友即可加入'), () => fallbackCopy(link));
-      } else fallbackCopy(link);
+    $('btn-copy-link').addEventListener('click', () => copyText(shareUrl()));
+    $('btn-share-link').addEventListener('click', shareLink);
+    $('btn-share').addEventListener('click', shareLink);
+    $('btn-clipboard').addEventListener('click', readClipboard);
+    $('btn-scan').addEventListener('click', openScan);
+    $('btn-discover').addEventListener('click', () => {
+      if (state.discoverRunning) stopDiscover(); else discoverHosts();
     });
-    $('qr-img').addEventListener('error', () => {
-      const frame = $('qr-img').closest('.qr-frame');
-      if (frame) frame.hidden = true;
-      const card = $('qr-img').closest('.qr-card');
-      if (card && !card.querySelector('.qr-fallback')) {
-        const tip = document.createElement('p');
-        tip.className = 'tip qr-fallback';
-        tip.textContent = '当前主机未启用二维码，点下方按钮复制访问链接发给朋友，对方打开即可自动加入。';
-        card.insertBefore(tip, $('btn-copy-link'));
-      }
+    $('btn-discover-stop').addEventListener('click', () => stopDiscover());
+    $('scan-close').addEventListener('click', closeScan);
+    $('scan-modal').querySelector('.modal-mask').addEventListener('click', closeScan);
+    $('btn-scan-photo').addEventListener('click', () => $('scan-file').click());
+    $('scan-file').addEventListener('change', (e) => decodeQrFile(e.target.files[0]));
+    $('status-chip').addEventListener('click', () => switchTab('connect'));
+
+    // 页面任意位置粘贴含地址的文本 → 自动识别并连接
+    document.addEventListener('paste', (e) => {
+      const cd = e.clipboardData || window.clipboardData;
+      const text = cd ? cd.getData('text') : '';
+      if (!text) return;
+      const tag = (e.target && e.target.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea') return;
+      if (parseHostText(text)) { e.preventDefault(); autoConnectFromText(text, '已从剪贴板识别'); }
     });
 
     $('confirm-cancel').addEventListener('click', () => { $('confirm-modal').hidden = true; state.confirmCb = null; });
@@ -636,6 +944,11 @@
         navigator.serviceWorker.register('/sw.js').catch(() => { /* 忽略：不影响使用 */ });
       });
     }
+
+    // 从别处复制地址后切回页面，提示一键连接
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') setTimeout(maybeAutoPaste, 350);
+    });
   }
 
   function fallbackCopy(text) {
